@@ -1,0 +1,20 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+*.tsbuildinfo
+next-env.d.ts
+
+# env files
+.env
+.env*.local
+
+# local HTTPS certs (mkcert)
+/certificates
+
+# misc
+.DS_Store
+*.pem
+.Rhistory
