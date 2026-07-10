@@ -21,6 +21,10 @@ export interface BECheckResult {
   headline: string;
   matchedIngredients: string[];
   explanation: string;
+  // Whether we actually had ingredient/label text to evaluate. False means
+  // "unknown" is a data gap; true means "unknown" is itself the answer
+  // (checked the ingredients, found no BE indicators).
+  hasData: boolean;
 }
 
 // USDA Bioengineered Food List (high-adoption BE crops), as of the last
@@ -94,6 +98,7 @@ export function checkBioengineered(params: {
       matchedIngredients: [],
       explanation:
         "We couldn't find ingredient or label information for this product. Try scanning the barcode again or check the package for a 'Bioengineered' disclosure.",
+      hasData: false,
     };
   }
 
@@ -105,6 +110,7 @@ export function checkBioengineered(params: {
       matchedIngredients: [],
       explanation:
         "This product carries an official USDA Bioengineered Food disclosure on its packaging or label data.",
+      hasData: true,
     };
   }
 
@@ -116,6 +122,7 @@ export function checkBioengineered(params: {
       matchedIngredients: [],
       explanation:
         "This product carries a Non-GMO Project Verified, USDA Organic, or equivalent certification, which excludes bioengineered ingredients.",
+      hasData: true,
     };
   }
 
@@ -136,6 +143,7 @@ export function checkBioengineered(params: {
       matchedIngredients: Array.from(matched),
       explanation:
         "This product lists ingredients commonly derived from crops on the USDA Bioengineered Food List. No official BE disclosure was found, so this is an inference from ingredients, not a confirmed disclosure.",
+      hasData: true,
     };
   }
 
@@ -145,5 +153,6 @@ export function checkBioengineered(params: {
     matchedIngredients: [],
     explanation:
       "We didn't find any high-risk BE crop derivatives in the listed ingredients, and no certification was present either. This isn't a guarantee — always check the package for the official disclosure.",
+    hasData: true,
   };
 }

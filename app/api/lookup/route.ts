@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
         matchedIngredients: [],
         explanation:
           "This barcode isn't in our product database yet. You can search by name instead, or check the package for a Bioengineered disclosure directly.",
+        hasData: false,
       },
     });
   }

@@ -5,9 +5,18 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AuthPanel } from "@/components/AuthPanel";
+import { checkBioengineered } from "@/lib/beCheck";
 
 type BEVerdict = "confirmed_be" | "likely_be" | "verified_non_gmo" | "unknown";
 type ScanSource = "barcode_scan" | "manual_entry";
+
+interface BEResult {
+  verdict: BEVerdict;
+  headline: string;
+  matchedIngredients: string[];
+  explanation: string;
+  hasData: boolean;
+}
 
 interface LookupResponse {
   product: {
@@ -16,12 +25,7 @@ interface LookupResponse {
     imageUrl: string | null;
     found: boolean;
   };
-  beResult: {
-    verdict: BEVerdict;
-    headline: string;
-    matchedIngredients: string[];
-    explanation: string;
-  };
+  beResult: BEResult;
 }
 
 const VERDICT_STYLE: Record<BEVerdict, { bg: string; label: string }> = {
@@ -30,6 +34,16 @@ const VERDICT_STYLE: Record<BEVerdict, { bg: string; label: string }> = {
   verified_non_gmo: { bg: "bg-verified", label: "NON-GMO VERIFIED" },
   unknown: { bg: "bg-manifest", label: "UNKNOWN" },
 };
+
+// "unknown" covers two very different situations: a genuine data gap, vs.
+// having checked real ingredient data and found nothing flagged. The latter
+// is an actual answer and should read like one.
+function getDisplayStyle(beResult: BEResult) {
+  if (beResult.verdict === "unknown" && beResult.hasData) {
+    return { bg: "bg-verified/70", label: "NO BE DETECTED" };
+  }
+  return VERDICT_STYLE[beResult.verdict];
+}
 
 export default function ScanPage() {
   const { user } = useAuth();
@@ -40,34 +54,60 @@ export default function ScanPage() {
   const [result, setResult] = useState<LookupResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [lastBarcode, setLastBarcode] = useState<string | null>(null);
+  const [manualIngredients, setManualIngredients] = useState("");
+  const [checkingIngredients, setCheckingIngredients] = useState(false);
+
+  async function saveScan(
+    barcode: string | null,
+    product: LookupResponse["product"],
+    beResult: BEResult,
+    source: ScanSource
+  ) {
+    if (!user) return;
+    const { error: insertError } = await supabase.from("scans").insert({
+      user_id: user.id,
+      barcode,
+      product_name: product.name,
+      brand: product.brand,
+      verdict: beResult.verdict,
+      matched_ingredients: beResult.matchedIngredients,
+      source,
+    });
+    if (!insertError) setSaved(true);
+  }
 
   async function runLookup(barcode: string, source: ScanSource) {
     setLoading(true);
     setError(null);
     setResult(null);
     setSaved(false);
+    setManualIngredients("");
+    setLastBarcode(barcode);
     try {
       const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
       if (!res.ok) throw new Error("Lookup failed");
       const data: LookupResponse = await res.json();
       setResult(data);
-
-      if (user) {
-        const { error: insertError } = await supabase.from("scans").insert({
-          user_id: user.id,
-          barcode,
-          product_name: data.product.name,
-          brand: data.product.brand,
-          verdict: data.beResult.verdict,
-          matched_ingredients: data.beResult.matchedIngredients,
-          source,
-        });
-        if (!insertError) setSaved(true);
-      }
+      await saveScan(barcode, data.product, data.beResult, source);
     } catch (e) {
       setError("Couldn't complete that lookup. Check your connection and try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function checkManualIngredients() {
+    if (!manualIngredients.trim() || !result) return;
+    setCheckingIngredients(true);
+    try {
+      const beResult = checkBioengineered({ ingredientsText: manualIngredients });
+      const updated: LookupResponse = { ...result, beResult };
+      setResult(updated);
+      setSaved(false);
+      await saveScan(lastBarcode, updated.product, beResult, "manual_entry");
+    } finally {
+      setCheckingIngredients(false);
     }
   }
 
@@ -95,8 +135,8 @@ export default function ScanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
-  const verdict = result?.beResult.verdict;
-  const style = verdict ? VERDICT_STYLE[verdict] : null;
+  const style = result ? getDisplayStyle(result.beResult) : null;
+  const needsManualIngredients = result && !result.beResult.hasData;
 
   return (
     <main className="mx-auto max-w-md px-5 py-8">
@@ -222,10 +262,33 @@ export default function ScanPage() {
             </div>
           )}
 
+          {needsManualIngredients && (
+            <div className="border-2 border-ink/20 p-3">
+              <p className="mb-2 font-mono text-xs uppercase text-manifest">
+                Get a real answer: paste the ingredient list from the package
+              </p>
+              <textarea
+                value={manualIngredients}
+                onChange={(e) => setManualIngredients(e.target.value)}
+                placeholder="e.g. Corn syrup, soybean oil, salt, natural flavors..."
+                rows={3}
+                className="w-full rounded-sm border-2 border-ink bg-paper px-3 py-2 font-mono text-sm outline-none focus:border-stamp"
+              />
+              <button
+                onClick={checkManualIngredients}
+                disabled={!manualIngredients.trim() || checkingIngredients}
+                className="mt-2 w-full rounded-sm border-2 border-ink bg-ink py-2 font-display text-sm font-semibold uppercase tracking-wide text-paper transition hover:bg-ink/90 disabled:opacity-50"
+              >
+                Check these ingredients
+              </button>
+            </div>
+          )}
+
           <button
             onClick={() => {
               setResult(null);
               setManualBarcode("");
+              setManualIngredients("");
               setSaved(false);
             }}
             className="w-full rounded-sm border-2 border-ink py-3 font-display text-lg font-semibold uppercase tracking-wide hover:bg-ink hover:text-paper"
