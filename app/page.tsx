@@ -28,11 +28,14 @@ interface LookupResponse {
   beResult: BEResult;
 }
 
-const VERDICT_STYLE: Record<BEVerdict, { bg: string; label: string }> = {
-  confirmed_be: { bg: "bg-stamp", label: "BIOENGINEERED" },
-  likely_be: { bg: "bg-stamp/80", label: "LIKELY BIOENGINEERED" },
-  verified_non_gmo: { bg: "bg-verified", label: "NON-GMO VERIFIED" },
-  unknown: { bg: "bg-manifest", label: "UNKNOWN" },
+// `answer` is the direct yes/no users actually want. `label` carries the
+// nuance (disclosure vs. inference vs. certification) as supporting detail —
+// the full caveat still lives in beResult.explanation below.
+const VERDICT_STYLE: Record<BEVerdict, { bg: string; label: string; answer: string }> = {
+  confirmed_be: { bg: "bg-stamp", label: "Official USDA disclosure", answer: "YES" },
+  likely_be: { bg: "bg-stamp/80", label: "Inferred from ingredients", answer: "YES" },
+  verified_non_gmo: { bg: "bg-verified", label: "Certified non-GMO", answer: "NO" },
+  unknown: { bg: "bg-manifest", label: "Not enough information", answer: "UNKNOWN" },
 };
 
 // "unknown" covers two very different situations: a genuine data gap, vs.
@@ -40,7 +43,7 @@ const VERDICT_STYLE: Record<BEVerdict, { bg: string; label: string }> = {
 // is an actual answer and should read like one.
 function getDisplayStyle(beResult: BEResult) {
   if (beResult.verdict === "unknown" && beResult.hasData) {
-    return { bg: "bg-verified/70", label: "NO BE DETECTED" };
+    return { bg: "bg-verified/70", label: "No BE indicators found", answer: "NO" };
   }
   return VERDICT_STYLE[beResult.verdict];
 }
@@ -243,11 +246,19 @@ export default function ScanPage() {
         <div className="mt-6 space-y-4">
           <div className={`${style.bg} rounded-sm p-4 text-paper`}>
             <p className="font-mono text-xs uppercase tracking-widest opacity-80">
-              {style.label}
+              Bioengineered?
             </p>
-            <p className="font-display text-2xl font-bold">
+            <p className="font-display text-6xl font-bold leading-none">
+              {style.answer}
+            </p>
+            <p className="mt-2 font-display text-lg font-semibold opacity-90">
               {result.beResult.headline}
             </p>
+            {style.label !== result.beResult.headline && (
+              <p className="font-mono text-[11px] uppercase tracking-widest opacity-70">
+                {style.label}
+              </p>
+            )}
           </div>
 
           {result.product.found && (
