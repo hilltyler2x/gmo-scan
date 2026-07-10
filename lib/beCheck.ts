@@ -127,13 +127,22 @@ export function checkBioengineered(params: {
   }
 
   // 3. Otherwise, infer risk from ingredient list.
+  // Word-boundary matching so e.g. "apple" doesn't match inside "pineapple",
+  // and "corn" doesn't match inside "popcorn" unless that's actually intended.
   const matched = new Set<string>();
 
+  function containsWholeTerm(haystack: string, term: string): boolean {
+    // Escape regex special chars in multi-word terms (e.g. "corn syrup").
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i");
+    return pattern.test(haystack);
+  }
+
   for (const crop of BE_CROPS) {
-    if (ingredients.includes(crop)) matched.add(crop);
+    if (containsWholeTerm(ingredients, crop)) matched.add(crop);
   }
   for (const [derivative, source] of Object.entries(BE_DERIVATIVES)) {
-    if (ingredients.includes(derivative)) matched.add(`${derivative} (${source})`);
+    if (containsWholeTerm(ingredients, derivative)) matched.add(`${derivative} (${source})`);
   }
 
   if (matched.size > 0) {
