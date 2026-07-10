@@ -57,6 +57,7 @@ export default function ScanPage() {
   const [lastBarcode, setLastBarcode] = useState<string | null>(null);
   const [manualIngredients, setManualIngredients] = useState("");
   const [checkingIngredients, setCheckingIngredients] = useState(false);
+  const [readingPhoto, setReadingPhoto] = useState(false);
 
   async function saveScan(
     barcode: string | null,
@@ -108,6 +109,31 @@ export default function ScanPage() {
       await saveScan(lastBarcode, updated.product, beResult, "manual_entry");
     } finally {
       setCheckingIngredients(false);
+    }
+  }
+
+  async function handleIngredientsPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    setReadingPhoto(true);
+    setError(null);
+    try {
+      const { recognize } = await import("tesseract.js");
+      const {
+        data: { text },
+      } = await recognize(file, "eng");
+      const cleaned = text.trim();
+      if (!cleaned) {
+        setError("Couldn't read any text from that photo. Try a clearer shot or type the ingredients instead.");
+        return;
+      }
+      setManualIngredients((prev) => (prev ? `${prev}\n${cleaned}` : cleaned));
+    } catch (err) {
+      setError("Couldn't read that photo. Try again or type the ingredients instead.");
+    } finally {
+      setReadingPhoto(false);
     }
   }
 
@@ -265,14 +291,28 @@ export default function ScanPage() {
           {needsManualIngredients && (
             <div className="border-2 border-ink/20 p-3">
               <p className="mb-2 font-mono text-xs uppercase text-manifest">
-                Get a real answer: paste the ingredient list from the package
+                Get a real answer: photograph or paste the ingredient list
               </p>
+
+              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-sm border-2 border-ink px-3 py-2 font-mono text-xs uppercase text-ink transition hover:bg-ink hover:text-paper aria-disabled:pointer-events-none aria-disabled:opacity-50">
+                {readingPhoto ? "Reading photo…" : "Take a photo of ingredients"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleIngredientsPhoto}
+                  disabled={readingPhoto}
+                  aria-disabled={readingPhoto}
+                  className="hidden"
+                />
+              </label>
+
               <textarea
                 value={manualIngredients}
                 onChange={(e) => setManualIngredients(e.target.value)}
                 placeholder="e.g. Corn syrup, soybean oil, salt, natural flavors..."
                 rows={3}
-                className="w-full rounded-sm border-2 border-ink bg-paper px-3 py-2 font-mono text-sm outline-none focus:border-stamp"
+                className="mt-2 w-full rounded-sm border-2 border-ink bg-paper px-3 py-2 font-mono text-sm outline-none focus:border-stamp"
               />
               <button
                 onClick={checkManualIngredients}
