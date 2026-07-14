@@ -52,22 +52,29 @@ export const BE_CROPS = [
 
 // Common derivative ingredient names that trace back to a BE crop even when
 // the crop name itself isn't printed on the label.
-const BE_DERIVATIVES: Record<string, string> = {
-  "corn syrup": "corn",
-  "high fructose corn syrup": "corn",
-  "corn starch": "corn",
-  "cornstarch": "corn",
-  "maltodextrin": "corn",
-  "dextrose": "corn",
-  "citric acid": "corn", // often fermented from corn-derived glucose
-  "xanthan gum": "corn",
-  "soy lecithin": "soy",
-  "soybean oil": "soy",
-  "textured vegetable protein": "soy",
-  "vegetable oil": "soy/canola/corn (unspecified blend)",
-  "canola oil": "canola",
-  "sugar": "sugar beet (unless cane sugar is specified)",
-  "cottonseed oil": "cotton",
+//
+// `weak: true` marks derivatives whose source crop can't actually be
+// determined from the word alone — plain "sugar" is the clearest case:
+// roughly half of US sugar is cane sugar, not sugar beet, and there's no
+// way to tell which one a label means from "sugar" by itself. Weak matches
+// are surfaced for transparency but never drive a "likely_be" verdict on
+// their own; only a strong (unambiguous) match does that.
+const BE_DERIVATIVES: Record<string, { source: string; weak?: boolean }> = {
+  "corn syrup": { source: "corn" },
+  "high fructose corn syrup": { source: "corn" },
+  "corn starch": { source: "corn" },
+  "cornstarch": { source: "corn" },
+  "maltodextrin": { source: "corn" },
+  "dextrose": { source: "corn" },
+  "citric acid": { source: "corn" }, // often fermented from corn-derived glucose
+  "xanthan gum": { source: "corn" },
+  "soy lecithin": { source: "soy" },
+  "soybean oil": { source: "soy" },
+  "textured vegetable protein": { source: "soy" },
+  "vegetable oil": { source: "soy/canola/corn (unspecified blend)" },
+  "canola oil": { source: "canola" },
+  "sugar": { source: "sugar beet (unless cane sugar is specified)", weak: true },
+  "cottonseed oil": { source: "cotton" },
 };
 
 const NON_GMO_CLAIMS = [
@@ -129,8 +136,6 @@ export function checkBioengineered(params: {
   // 3. Otherwise, infer risk from ingredient list.
   // Word-boundary matching so e.g. "apple" doesn't match inside "pineapple",
   // and "corn" doesn't match inside "popcorn" unless that's actually intended.
-  const matched = new Set<string>();
-
   function containsWholeTerm(haystack: string, term: string): boolean {
     // Escape regex special chars in multi-word terms (e.g. "corn syrup").
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -138,20 +143,44 @@ export function checkBioengineered(params: {
     return pattern.test(haystack);
   }
 
+  const strongMatches = new Set<string>();
+  const weakMatches = new Set<string>();
+
   for (const crop of BE_CROPS) {
-    if (containsWholeTerm(ingredients, crop)) matched.add(crop);
+    if (containsWholeTerm(ingredients, crop)) strongMatches.add(crop);
   }
-  for (const [derivative, source] of Object.entries(BE_DERIVATIVES)) {
-    if (containsWholeTerm(ingredients, derivative)) matched.add(`${derivative} (${source})`);
+  for (const [derivative, info] of Object.entries(BE_DERIVATIVES)) {
+    if (containsWholeTerm(ingredients, derivative)) {
+      const label = `${derivative} (${info.source})`;
+      if (info.weak) {
+        weakMatches.add(label);
+      } else {
+        strongMatches.add(label);
+      }
+    }
   }
 
-  if (matched.size > 0) {
+  // A weak match alone (e.g. just "sugar") isn't enough to call a product
+  // likely bioengineered — it's ambiguous by itself. Only surface it as
+  // supporting context once a strong, unambiguous match is also present.
+  if (strongMatches.size > 0) {
     return {
       verdict: "likely_be",
       headline: "Likely contains bioengineered ingredients",
-      matchedIngredients: Array.from(matched),
+      matchedIngredients: [...Array.from(strongMatches), ...Array.from(weakMatches)],
       explanation:
         "This product lists ingredients commonly derived from crops on the USDA Bioengineered Food List. No official BE disclosure was found, so this is an inference from ingredients, not a confirmed disclosure.",
+      hasData: true,
+    };
+  }
+
+  if (weakMatches.size > 0) {
+    return {
+      verdict: "unknown",
+      headline: "No clear BE indicators found",
+      matchedIngredients: Array.from(weakMatches),
+      explanation:
+        "This product lists ingredients (like plain \"sugar\") whose source crop can't be determined from the label alone — it could be cane sugar or bioengineered sugar beet, and there's no way to tell which from the wording. We didn't find any unambiguous BE indicators, so we can't confidently say either way.",
       hasData: true,
     };
   }

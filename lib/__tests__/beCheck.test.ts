@@ -82,3 +82,21 @@ test("word-boundary matching: multi-word derivative term still matches correctly
     result.matchedIngredients.some((i) => i.startsWith("corn syrup"))
   );
 });
+
+test("plain 'sugar' alone (ambiguous cane vs. beet) does not trigger likely_be", () => {
+  const result = checkBioengineered({
+    ingredientsText: "orange juice, ginger, sugar, salt",
+  });
+  assert.equal(result.verdict, "unknown");
+  assert.equal(result.hasData, true);
+  assert.ok(result.matchedIngredients.some((i) => i.startsWith("sugar")));
+});
+
+test("plain 'sugar' plus a strong match still reaches likely_be, including sugar as context", () => {
+  const result = checkBioengineered({
+    ingredientsText: "canola oil, sugar, salt",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.some((i) => i.startsWith("canola")));
+  assert.ok(result.matchedIngredients.some((i) => i.startsWith("sugar")));
+});
