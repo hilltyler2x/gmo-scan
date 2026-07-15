@@ -100,3 +100,25 @@ test("plain 'sugar' plus a strong match still reaches likely_be, including sugar
   assert.ok(result.matchedIngredients.some((i) => i.startsWith("canola")));
   assert.ok(result.matchedIngredients.some((i) => i.startsWith("sugar")));
 });
+
+test("plain 'vegetable oil' alone (ambiguous soy/canola/corn blend) does not trigger likely_be", () => {
+  const result = checkBioengineered({
+    ingredientsText: "water, vegetable oil, salt",
+  });
+  assert.equal(result.verdict, "unknown");
+  assert.equal(result.hasData, true);
+  assert.ok(
+    result.matchedIngredients.some((i) => i.startsWith("vegetable oil"))
+  );
+});
+
+test("plain 'vegetable oil' plus a strong match still reaches likely_be", () => {
+  const result = checkBioengineered({
+    ingredientsText: "corn syrup, vegetable oil, salt",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.some((i) => i.startsWith("corn syrup")));
+  assert.ok(
+    result.matchedIngredients.some((i) => i.startsWith("vegetable oil"))
+  );
+});

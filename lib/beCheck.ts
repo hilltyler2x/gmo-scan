@@ -71,7 +71,7 @@ const BE_DERIVATIVES: Record<string, { source: string; weak?: boolean }> = {
   "soy lecithin": { source: "soy" },
   "soybean oil": { source: "soy" },
   "textured vegetable protein": { source: "soy" },
-  "vegetable oil": { source: "soy/canola/corn (unspecified blend)" },
+  "vegetable oil": { source: "soy/canola/corn (unspecified blend)", weak: true },
   "canola oil": { source: "canola" },
   "sugar": { source: "sugar beet (unless cane sugar is specified)", weak: true },
   "cottonseed oil": { source: "cotton" },
