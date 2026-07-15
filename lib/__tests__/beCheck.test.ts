@@ -24,6 +24,19 @@ test("Open Food Facts 'Contains GMOs' label tag returns confirmed_be", () => {
   assert.equal(result.hasData, true);
 });
 
+test("Open Food Facts bare 'Organic' label tag returns verified_non_gmo, even with a BE-crop ingredient present", () => {
+  // Real case: Annie's Shells & Real Aged Cheddar has labelsText "Organic,
+  // No artificial flavors, ..." (not the exact phrase "USDA Organic") and
+  // its ingredients include Corn Starch. Since the product is genuinely
+  // organic-certified, that legally excludes BE ingredients regardless of
+  // what's in the ingredient list.
+  const result = checkBioengineered({
+    ingredientsText: "Organic pasta, dried cheddar cheese, corn starch, salt",
+    labelsText: "Organic, No artificial flavors",
+  });
+  assert.equal(result.verdict, "verified_non_gmo");
+});
+
 test("non-GMO / organic claim returns verified_non_gmo", () => {
   const result = checkBioengineered({ labelsText: "USDA Organic" });
   assert.equal(result.verdict, "verified_non_gmo");

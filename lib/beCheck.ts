@@ -82,6 +82,11 @@ const NON_GMO_CLAIMS = [
   "non gmo project verified",
   "usda organic",
   "certified organic",
+  // Open Food Facts frequently normalizes organic certifications down to a
+  // plain "Organic" label tag rather than "USDA Organic"/"Certified Organic"
+  // verbatim. Any genuine organic certification legally excludes
+  // bioengineered ingredients, so the bare word counts too.
+  "organic",
   "non-bioengineered",
 ];
 
@@ -94,6 +99,16 @@ const BE_DISCLOSURE_PHRASES = [
   "contains gmos",
   "contains gmo",
 ];
+
+// Word-boundary matching so e.g. "apple" doesn't match inside "pineapple",
+// "corn" doesn't match inside "popcorn", and "organic" doesn't match inside
+// some unrelated compound word, unless that's actually intended.
+function containsWholeTerm(haystack: string, term: string): boolean {
+  // Escape regex special chars in multi-word terms (e.g. "corn syrup").
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i");
+  return pattern.test(haystack);
+}
 
 export function checkBioengineered(params: {
   ingredientsText?: string;
@@ -114,7 +129,7 @@ export function checkBioengineered(params: {
   }
 
   // 1. Explicit BE disclosure wins — it's a legal claim, not an inference.
-  if (BE_DISCLOSURE_PHRASES.some((p) => labels.includes(p))) {
+  if (BE_DISCLOSURE_PHRASES.some((p) => containsWholeTerm(labels, p))) {
     return {
       verdict: "confirmed_be",
       headline: "Confirmed bioengineered",
@@ -126,7 +141,7 @@ export function checkBioengineered(params: {
   }
 
   // 2. Explicit non-GMO / organic claim also wins over ingredient guessing.
-  if (NON_GMO_CLAIMS.some((c) => labels.includes(c))) {
+  if (NON_GMO_CLAIMS.some((c) => containsWholeTerm(labels, c))) {
     return {
       verdict: "verified_non_gmo",
       headline: "Verified non-GMO",
@@ -138,15 +153,6 @@ export function checkBioengineered(params: {
   }
 
   // 3. Otherwise, infer risk from ingredient list.
-  // Word-boundary matching so e.g. "apple" doesn't match inside "pineapple",
-  // and "corn" doesn't match inside "popcorn" unless that's actually intended.
-  function containsWholeTerm(haystack: string, term: string): boolean {
-    // Escape regex special chars in multi-word terms (e.g. "corn syrup").
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i");
-    return pattern.test(haystack);
-  }
-
   const strongMatches = new Set<string>();
   const weakMatches = new Set<string>();
 
