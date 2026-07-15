@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lookupProduct } from "@/lib/productLookup";
+import { lookupUsdaProduct } from "@/lib/usdaLookup";
 import { checkBioengineered } from "@/lib/beCheck";
 
 export async function GET(req: NextRequest) {
@@ -12,7 +13,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const product = await lookupProduct(barcode);
+  let product = await lookupProduct(barcode);
+
+  // Fall back to USDA FoodData Central when Open Food Facts has no record.
+  if (!product.found) {
+    product = await lookupUsdaProduct(barcode);
+  }
 
   if (!product.found) {
     return NextResponse.json({
