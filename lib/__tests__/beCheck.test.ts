@@ -16,6 +16,14 @@ test("explicit BE disclosure phrase returns confirmed_be", () => {
   assert.equal(result.hasData, true);
 });
 
+test("Open Food Facts 'Contains GMOs' label tag returns confirmed_be", () => {
+  const result = checkBioengineered({
+    labelsText: "Contains GMOs, Orthodox Union Kosher",
+  });
+  assert.equal(result.verdict, "confirmed_be");
+  assert.equal(result.hasData, true);
+});
+
 test("non-GMO / organic claim returns verified_non_gmo", () => {
   const result = checkBioengineered({ labelsText: "USDA Organic" });
   assert.equal(result.verdict, "verified_non_gmo");

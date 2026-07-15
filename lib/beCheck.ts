@@ -89,6 +89,10 @@ const BE_DISCLOSURE_PHRASES = [
   "bioengineered food",
   "derived from bioengineering",
   "contains a bioengineered food ingredient",
+  // Open Food Facts' own community label tag, distinct from the USDA's
+  // exact statutory wording above but just as much a disclosure.
+  "contains gmos",
+  "contains gmo",
 ];
 
 export function checkBioengineered(params: {
