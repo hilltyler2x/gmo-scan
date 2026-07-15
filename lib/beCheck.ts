@@ -27,55 +27,178 @@ export interface BECheckResult {
   hasData: boolean;
 }
 
+interface CropEntry {
+  term: string; // search term, any language
+  label: string; // English display name shown to the user
+  // `weak: true` marks crops whose real-world BE-variety adoption is low
+  // (a small niche product, not the dominant form on the market) — e.g.
+  // Arctic Apples and Innate potatoes are a tiny fraction of apples/potatoes
+  // actually sold, unlike corn/soy/canola/cotton/sugar beet which are
+  // 85%+ bioengineered in the US. Weak crops alone don't drive a
+  // "likely_be" verdict, same treatment as ambiguous derivatives below.
+  weak?: boolean;
+}
+
 // USDA Bioengineered Food List (high-adoption BE crops), as of the last
-// published update. Re-verify against the live list periodically.
-export const BE_CROPS = [
-  "corn",
-  "maize",
-  "soy",
-  "soybean",
-  "canola",
-  "rapeseed",
-  "sugar beet",
-  "alfalfa",
-  "cotton",
-  "cottonseed",
-  "papaya",
-  "summer squash",
-  "yellow squash",
-  "zucchini",
-  "potato",
-  "apple", // Arctic Apples
-  "pink pineapple",
-  "aac salmon", // AquAdvantage salmon
+// published update, plus common non-English search terms for the same
+// crops. Re-verify against the live list periodically:
+// https://www.ams.usda.gov/rules-regulations/be
+export const BE_CROPS: CropEntry[] = [
+  { term: "corn", label: "corn" },
+  { term: "maize", label: "corn" },
+  { term: "maïs", label: "corn" }, // French
+  { term: "maíz", label: "corn" }, // Spanish
+  { term: "mais", label: "corn" }, // German
+  { term: "soy", label: "soy" },
+  { term: "soja", label: "soy" }, // French / German / Spanish / Portuguese / Italian
+  { term: "soya", label: "soy" }, // Spanish variant
+  { term: "soybean", label: "soybean" },
+  { term: "canola", label: "canola" },
+  { term: "rapeseed", label: "rapeseed" },
+  { term: "colza", label: "canola/rapeseed" }, // French / Spanish / German umbrella term
+  { term: "sugar beet", label: "sugar beet" },
+  { term: "betterave sucrière", label: "sugar beet" }, // French
+  { term: "remolacha azucarera", label: "sugar beet" }, // Spanish
+  { term: "zuckerrübe", label: "sugar beet" }, // German
+  { term: "alfalfa", label: "alfalfa" },
+  { term: "cotton", label: "cotton" },
+  { term: "coton", label: "cotton" }, // French
+  { term: "algodón", label: "cotton" }, // Spanish
+  { term: "baumwolle", label: "cotton" }, // German
+  { term: "cottonseed", label: "cottonseed" },
+  { term: "papaya", label: "papaya" },
+  { term: "summer squash", label: "summer squash" },
+  { term: "yellow squash", label: "yellow squash" },
+  { term: "zucchini", label: "zucchini" },
+  { term: "courgette", label: "zucchini" }, // French / British English
+  // Arctic Apples and Innate potatoes are real BE-listed crops, but a
+  // small niche of the actual apple/potato market — see `weak` above.
+  { term: "potato", label: "potato", weak: true },
+  { term: "pomme de terre", label: "potato", weak: true }, // French
+  { term: "patata", label: "potato", weak: true }, // Spanish / Italian
+  { term: "kartoffel", label: "potato", weak: true }, // German
+  { term: "apple", label: "apple", weak: true }, // Arctic Apples
+  { term: "pomme", label: "apple", weak: true }, // French
+  { term: "manzana", label: "apple", weak: true }, // Spanish
+  { term: "apfel", label: "apple", weak: true }, // German
+  { term: "pink pineapple", label: "pink pineapple" },
+  { term: "aac salmon", label: "aac salmon" }, // AquAdvantage salmon
 ];
 
+interface DerivativeEntry {
+  term: string; // search term, any language
+  label: string; // English display name shown to the user
+  source: string;
+  // See CropEntry.weak — same idea, but for derivative ingredient names
+  // whose source crop genuinely can't be determined from the word alone
+  // (plain "sugar" could be cane or beet; generic "vegetable oil" or
+  // "modified starch" could come from several different crops).
+  weak?: boolean;
+}
+
 // Common derivative ingredient names that trace back to a BE crop even when
-// the crop name itself isn't printed on the label.
-//
-// `weak: true` marks derivatives whose source crop can't actually be
-// determined from the word alone — plain "sugar" is the clearest case:
-// roughly half of US sugar is cane sugar, not sugar beet, and there's no
-// way to tell which one a label means from "sugar" by itself. Weak matches
-// are surfaced for transparency but never drive a "likely_be" verdict on
-// their own; only a strong (unambiguous) match does that.
-const BE_DERIVATIVES: Record<string, { source: string; weak?: boolean }> = {
-  "corn syrup": { source: "corn" },
-  "high fructose corn syrup": { source: "corn" },
-  "corn starch": { source: "corn" },
-  "cornstarch": { source: "corn" },
-  "maltodextrin": { source: "corn" },
-  "dextrose": { source: "corn" },
-  "citric acid": { source: "corn" }, // often fermented from corn-derived glucose
-  "xanthan gum": { source: "corn" },
-  "soy lecithin": { source: "soy" },
-  "soybean oil": { source: "soy" },
-  "textured vegetable protein": { source: "soy" },
-  "vegetable oil": { source: "soy/canola/corn (unspecified blend)", weak: true },
-  "canola oil": { source: "canola" },
-  "sugar": { source: "sugar beet (unless cane sugar is specified)", weak: true },
-  "cottonseed oil": { source: "cotton" },
-};
+// the crop name itself isn't printed on the label, plus non-English
+// equivalents for the highest-value (highest-adoption) crops.
+const BE_DERIVATIVES: DerivativeEntry[] = [
+  { term: "corn syrup", label: "corn syrup", source: "corn" },
+  { term: "high fructose corn syrup", label: "corn syrup", source: "corn" },
+  { term: "corn starch", label: "corn starch", source: "corn" },
+  { term: "cornstarch", label: "corn starch", source: "corn" },
+  { term: "amidon de maïs", label: "corn starch", source: "corn" }, // French
+  { term: "almidón de maíz", label: "corn starch", source: "corn" }, // Spanish
+  { term: "maisstärke", label: "corn starch", source: "corn" }, // German
+  { term: "maltodextrin", label: "maltodextrin", source: "corn" },
+  { term: "dextrose", label: "dextrose", source: "corn" },
+  { term: "citric acid", label: "citric acid", source: "corn" }, // often fermented from corn-derived glucose
+  { term: "xanthan gum", label: "xanthan gum", source: "corn" },
+  { term: "soy lecithin", label: "soy lecithin", source: "soy" },
+  { term: "lécithine de soja", label: "soy lecithin", source: "soy" }, // French
+  { term: "lecitina de soja", label: "soy lecithin", source: "soy" }, // Spanish
+  { term: "sojalecithin", label: "soy lecithin", source: "soy" }, // German
+  { term: "soybean oil", label: "soybean oil", source: "soy" },
+  { term: "huile de soja", label: "soybean oil", source: "soy" }, // French
+  { term: "textured vegetable protein", label: "textured vegetable protein", source: "soy" },
+  { term: "canola oil", label: "canola oil", source: "canola" },
+  { term: "huile de colza", label: "canola/rapeseed oil", source: "canola/rapeseed" }, // French
+  { term: "rapsöl", label: "canola/rapeseed oil", source: "canola/rapeseed" }, // German
+  { term: "cottonseed oil", label: "cottonseed oil", source: "cotton" },
+  // Fixes a real gap: labels sometimes say "beet sugar" (reversed word
+  // order from the "sugar beet" crop name), which wouldn't otherwise match.
+  // Unlike plain "sugar" below, this phrasing is unambiguous.
+  { term: "beet sugar", label: "beet sugar", source: "sugar beet" },
+  {
+    term: "vegetable oil",
+    label: "vegetable oil",
+    source: "soy/canola/corn (unspecified blend)",
+    weak: true,
+  },
+  {
+    term: "huile végétale",
+    label: "vegetable oil",
+    source: "soy/canola/corn (unspecified blend)",
+    weak: true,
+  }, // French
+  {
+    term: "aceite vegetal",
+    label: "vegetable oil",
+    source: "soy/canola/corn (unspecified blend)",
+    weak: true,
+  }, // Spanish
+  {
+    term: "pflanzenöl",
+    label: "vegetable oil",
+    source: "soy/canola/corn (unspecified blend)",
+    weak: true,
+  }, // German
+  {
+    term: "sugar",
+    label: "sugar",
+    source: "sugar beet (unless cane sugar is specified)",
+    weak: true,
+  },
+  {
+    term: "sucre",
+    label: "sugar",
+    source: "sugar beet (unless cane sugar is specified)",
+    weak: true,
+  }, // French
+  {
+    term: "azúcar",
+    label: "sugar",
+    source: "sugar beet (unless cane sugar is specified)",
+    weak: true,
+  }, // Spanish
+  {
+    term: "zucker",
+    label: "sugar",
+    source: "sugar beet (unless cane sugar is specified)",
+    weak: true,
+  }, // German
+  {
+    term: "modified food starch",
+    label: "modified food starch",
+    source: "corn/potato/tapioca (unspecified)",
+    weak: true,
+  },
+  {
+    term: "modified starch",
+    label: "modified starch",
+    source: "corn/potato/tapioca (unspecified)",
+    weak: true,
+  },
+  {
+    term: "glucose syrup",
+    label: "glucose syrup",
+    source: "corn/wheat/potato (unspecified)",
+    weak: true,
+  },
+  {
+    term: "lecithin",
+    label: "lecithin",
+    source: "soy/sunflower (unspecified)",
+    weak: true,
+  },
+];
 
 const NON_GMO_CLAIMS = [
   "non-gmo project verified",
@@ -170,12 +293,18 @@ export function checkBioengineered(params: {
   const weakMatches = new Set<string>();
 
   for (const crop of BE_CROPS) {
-    if (containsWholeTerm(ingredients, crop)) strongMatches.add(crop);
+    if (containsWholeTerm(ingredients, crop.term)) {
+      if (crop.weak) {
+        weakMatches.add(crop.label);
+      } else {
+        strongMatches.add(crop.label);
+      }
+    }
   }
-  for (const [derivative, info] of Object.entries(BE_DERIVATIVES)) {
-    if (containsWholeTerm(ingredients, derivative)) {
-      const label = `${derivative} (${info.source})`;
-      if (info.weak) {
+  for (const derivative of BE_DERIVATIVES) {
+    if (containsWholeTerm(ingredients, derivative.term)) {
+      const label = `${derivative.label} (${derivative.source})`;
+      if (derivative.weak) {
         weakMatches.add(label);
       } else {
         strongMatches.add(label);
@@ -203,7 +332,7 @@ export function checkBioengineered(params: {
       headline: "No clear BE indicators found",
       matchedIngredients: Array.from(weakMatches),
       explanation:
-        "This product lists ingredients (like plain \"sugar\") whose source crop can't be determined from the label alone — it could be cane sugar or bioengineered sugar beet, and there's no way to tell which from the wording. We didn't find any unambiguous BE indicators, so we can't confidently say either way.",
+        "This product lists ingredients whose source crop can't be determined from the label alone (e.g. plain sugar could be cane or bioengineered sugar beet, and generic vegetable oil or starch could come from several different crops). We didn't find any unambiguous BE indicators, so we can't confidently say either way.",
       hasData: true,
     };
   }

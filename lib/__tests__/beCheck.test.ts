@@ -179,3 +179,68 @@ test("Open Food Facts 'No GMOs' label claim returns verified_non_gmo, even with 
   });
   assert.equal(result.verdict, "verified_non_gmo");
 });
+
+test("'potato' alone is weak (niche BE-variety adoption) and doesn't drive likely_be by itself", () => {
+  const result = checkBioengineered({ ingredientsText: "potato, salt, oil" });
+  assert.equal(result.verdict, "unknown");
+  assert.ok(result.matchedIngredients.includes("potato"));
+});
+
+test("'apple' alone is weak (niche BE-variety adoption) and doesn't drive likely_be by itself", () => {
+  const result = checkBioengineered({ ingredientsText: "apple, cinnamon" });
+  assert.equal(result.verdict, "unknown");
+  assert.ok(result.matchedIngredients.includes("apple"));
+});
+
+test("'beet sugar' (reversed word order from 'sugar beet') is an unambiguous strong match", () => {
+  const result = checkBioengineered({
+    ingredientsText: "water, beet sugar, salt",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.some((i) => i.startsWith("beet sugar")));
+});
+
+test("'modified food starch' and 'glucose syrup' are weak (ambiguous source crop)", () => {
+  const result = checkBioengineered({
+    ingredientsText: "water, modified food starch, glucose syrup, salt",
+  });
+  assert.equal(result.verdict, "unknown");
+  assert.ok(
+    result.matchedIngredients.some((i) => i.startsWith("modified food starch"))
+  );
+  assert.ok(result.matchedIngredients.some((i) => i.startsWith("glucose syrup")));
+});
+
+test("real French ingredient text (Nutella) is now caught via 'SOJA' matching the soy crop term", () => {
+  // Real case from this session: Nutella's Open Food Facts entry is in
+  // French. Before non-English matching, this returned "no BE indicators
+  // found" - a false negative, since "SOJA" (soy) never matched anything.
+  const result = checkBioengineered({
+    ingredientsText:
+      "Sucre, huile de palme, NOISETTES 13%, cacao maigre 7,4%, LAIT écrémé en poudre 6,6%, LACTOSERUM en poudre, émulsifiants: lécithines [SOJA), vanilline. Sans gluten.",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.includes("soy"));
+});
+
+test("real German ingredient text (Snickers) is caught via 'Sojalecithin' and 'Zucker'", () => {
+  // Real case from this session: a German Snickers entry lists "Zucker"
+  // (sugar) and "Sojalecithin" (soy lecithin, German compound word with no
+  // space) rather than English terms.
+  const result = checkBioengineered({
+    ingredientsText:
+      "Zucker, Glukosesirup, Erdnüsse, Magermilchpulver, Kakaobutter, Kakaomasse, Molkepermeat (Milch), Sonnenblumenöl, Butterreinfett (Milch), Palmfett, Salz, Emulgator (Sojalecithin), Hühnerei-Trockeneiweiss.",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(
+    result.matchedIngredients.some((i) => i.startsWith("soy lecithin"))
+  );
+});
+
+test("Spanish ingredient terms match: 'maíz' (corn) and 'azúcar' (sugar)", () => {
+  const result = checkBioengineered({
+    ingredientsText: "agua, maíz, azúcar, sal",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.includes("corn"));
+});
