@@ -143,3 +143,39 @@ test("plain 'vegetable oil' plus a strong match still reaches likely_be", () => 
     result.matchedIngredients.some((i) => i.startsWith("vegetable oil"))
   );
 });
+
+test("plural forms match too: 'rapeseed' matches inside real Jif ingredient text with 'vegetable oils'", () => {
+  // Real case: Jif Creamy Peanut Butter lists "fully hydrogenated vegetable
+  // oils (rapeseed and soybean)" - plural "oils", and rapeseed/soybean named
+  // directly. All three should be caught as strong matches.
+  const result = checkBioengineered({
+    ingredientsText:
+      "roasted peanuts, sugar, molasses, fully hydrogenated vegetable oils (rapeseed and soybean), mono and diglycerides, salt",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.includes("rapeseed"));
+  assert.ok(result.matchedIngredients.includes("soybean"));
+});
+
+test("plural forms match: 'potatoes' matches the 'potato' crop entry", () => {
+  const result = checkBioengineered({
+    ingredientsText: "dried potatoes, salt, oil",
+  });
+  assert.ok(result.matchedIngredients.includes("potato"));
+});
+
+test("plural word-boundary still holds: 'corns' does not match inside 'unicorns'", () => {
+  const result = checkBioengineered({ ingredientsText: "unicorns, salt" });
+  assert.equal(result.matchedIngredients.length, 0);
+});
+
+test("Open Food Facts 'No GMOs' label claim returns verified_non_gmo, even with a BE-crop ingredient present", () => {
+  // Real case: a Jif Creamy Peanut Butter variant has labelsText containing
+  // "No GMOs" alongside rapeseed/soybean oils in the ingredients.
+  const result = checkBioengineered({
+    ingredientsText:
+      "roasted peanuts, sugar, molasses, fully hydrogenated vegetable oils (rapeseed and soybean), salt",
+    labelsText: "No gluten, KosherNo glutenNo GMOsOrthodox Union Kosher",
+  });
+  assert.equal(result.verdict, "verified_non_gmo");
+});

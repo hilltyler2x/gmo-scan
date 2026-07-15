@@ -88,6 +88,8 @@ const NON_GMO_CLAIMS = [
   // bioengineered ingredients, so the bare word counts too.
   "organic",
   "non-bioengineered",
+  "no gmos",
+  "no gmo",
 ];
 
 const BE_DISCLOSURE_PHRASES = [
@@ -102,11 +104,13 @@ const BE_DISCLOSURE_PHRASES = [
 
 // Word-boundary matching so e.g. "apple" doesn't match inside "pineapple",
 // "corn" doesn't match inside "popcorn", and "organic" doesn't match inside
-// some unrelated compound word, unless that's actually intended.
+// some unrelated compound word, unless that's actually intended. Also allows
+// a trailing "s"/"es" so plurals match too (e.g. "vegetable oils", "potatoes")
+// — real ingredient lists say both "vegetable oil" and "vegetable oils".
 function containsWholeTerm(haystack: string, term: string): boolean {
   // Escape regex special chars in multi-word terms (e.g. "corn syrup").
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i");
+  const pattern = new RegExp(`(?<![a-z])${escaped}(e?s)?(?![a-z])`, "i");
   return pattern.test(haystack);
 }
 
@@ -129,7 +133,14 @@ export function checkBioengineered(params: {
   }
 
   // 1. Explicit BE disclosure wins — it's a legal claim, not an inference.
-  if (BE_DISCLOSURE_PHRASES.some((p) => containsWholeTerm(labels, p))) {
+  // Open Food Facts' labelsText is a structured tag field, not free-text
+  // prose, and tags are sometimes concatenated with no separator between
+  // them (e.g. "...glutenNo GMOsOrthodox..."). Word-boundary matching would
+  // miss those real cases, so we use plain substring matching here instead
+  // — the phrases themselves are distinctive multi-word strings unlikely to
+  // collide accidentally, unlike single crop names in free-text ingredient
+  // lists (where word-boundary matching earns its keep).
+  if (BE_DISCLOSURE_PHRASES.some((p) => labels.includes(p))) {
     return {
       verdict: "confirmed_be",
       headline: "Confirmed bioengineered",
@@ -141,7 +152,9 @@ export function checkBioengineered(params: {
   }
 
   // 2. Explicit non-GMO / organic claim also wins over ingredient guessing.
-  if (NON_GMO_CLAIMS.some((c) => containsWholeTerm(labels, c))) {
+  // Same reasoning as above: plain substring matching for this structured,
+  // tag-like field.
+  if (NON_GMO_CLAIMS.some((c) => labels.includes(c))) {
     return {
       verdict: "verified_non_gmo",
       headline: "Verified non-GMO",
