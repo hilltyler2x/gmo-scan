@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
@@ -173,7 +174,12 @@ export default function ScanPage() {
         <h1 className="font-display text-3xl font-bold uppercase tracking-tight">
           GMO Scan
         </h1>
-        <span className="font-mono text-xs text-manifest">FORM BE-01</span>
+        <Link
+          href="/history"
+          className="font-mono text-xs uppercase text-manifest hover:text-ink hover:underline"
+        >
+          History
+        </Link>
       </header>
 
       <AuthPanel />
