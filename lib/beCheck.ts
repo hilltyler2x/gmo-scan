@@ -37,6 +37,10 @@ interface CropEntry {
   // 85%+ bioengineered in the US. Weak crops alone don't drive a
   // "likely_be" verdict, same treatment as ambiguous derivatives below.
   weak?: boolean;
+  // Extra disqualifying qualifier words checked in addition to "organic"
+  // (always excluded — see hasUnqualifiedOccurrence). E.g. "sugar" doesn't
+  // count when the text specifically says "cane sugar".
+  excludeIfQualifiedBy?: string[];
 }
 
 // USDA Bioengineered Food List (high-adoption BE crops), as of the last
@@ -94,6 +98,8 @@ interface DerivativeEntry {
   // (plain "sugar" could be cane or beet; generic "vegetable oil" or
   // "modified starch" could come from several different crops).
   weak?: boolean;
+  // See CropEntry.excludeIfQualifiedBy.
+  excludeIfQualifiedBy?: string[];
 }
 
 // Common derivative ingredient names that trace back to a BE crop even when
@@ -155,25 +161,31 @@ const BE_DERIVATIVES: DerivativeEntry[] = [
     label: "sugar",
     source: "sugar beet (unless cane sugar is specified)",
     weak: true,
+    excludeIfQualifiedBy: ["cane"],
   },
   {
     term: "sucre",
     label: "sugar",
     source: "sugar beet (unless cane sugar is specified)",
     weak: true,
+    excludeIfQualifiedBy: ["cane", "canne"],
   }, // French
   {
     term: "azúcar",
     label: "sugar",
     source: "sugar beet (unless cane sugar is specified)",
     weak: true,
+    excludeIfQualifiedBy: ["cane", "caña"],
   }, // Spanish
   {
     term: "zucker",
     label: "sugar",
     source: "sugar beet (unless cane sugar is specified)",
     weak: true,
-  }, // German
+    excludeIfQualifiedBy: ["cane"],
+  }, // German — "Rohrzucker" (cane sugar) is one compound word with no
+  // space, so it never matches bare "zucker" as a word in the first place
+  // (word-boundary blocks it), unlike the qualifier-word cases above.
   {
     term: "modified food starch",
     label: "modified food starch",
@@ -230,11 +242,39 @@ const BE_DISCLOSURE_PHRASES = [
 // some unrelated compound word, unless that's actually intended. Also allows
 // a trailing "s"/"es" so plurals match too (e.g. "vegetable oils", "potatoes")
 // — real ingredient lists say both "vegetable oil" and "vegetable oils".
-function containsWholeTerm(haystack: string, term: string): boolean {
+function termPattern(term: string): RegExp {
   // Escape regex special chars in multi-word terms (e.g. "corn syrup").
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(?<![a-z])${escaped}(e?s)?(?![a-z])`, "i");
-  return pattern.test(haystack);
+  return new RegExp(`(?<![a-z])${escaped}(e?s)?(?![a-z])`, "gi");
+}
+
+// True if `term` appears in `haystack` at least once WITHOUT being
+// immediately preceded by a disqualifying qualifier word — "organic" always
+// counts (a genuinely organic-certified ingredient legally can't be
+// bioengineered), plus any per-entry extras (e.g. "cane" for plain "sugar",
+// since "cane sugar" is unambiguously not sugar-beet derived). A term that
+// ONLY ever shows up with an exempting qualifier isn't counted as a match
+// at all — e.g. "Organic Soybean Oil" doesn't flag "soy".
+//
+// Known limitation: this checks the qualifier nearest each occurrence, not
+// full sentence structure, so a product mixing both an organic and a
+// conventional source of the exact same crop name (rare in practice) could
+// be under-flagged. That trade-off favors not penalizing genuinely organic
+// ingredients over catching that unusual edge case.
+function hasUnqualifiedOccurrence(
+  haystack: string,
+  term: string,
+  extraExcludeQualifiers: string[] = []
+): boolean {
+  const qualifiers = ["organic", ...extraExcludeQualifiers];
+  const matches = [...haystack.matchAll(termPattern(term))];
+
+  return matches.some((match) => {
+    const start = match.index ?? 0;
+    const before = haystack.slice(Math.max(0, start - 40), start);
+    const nearbyWords = before.trim().split(/\s+/).slice(-3).join(" ");
+    return !qualifiers.some((q) => termPattern(q).test(nearbyWords));
+  });
 }
 
 export function checkBioengineered(params: {
@@ -293,7 +333,7 @@ export function checkBioengineered(params: {
   const weakMatches = new Set<string>();
 
   for (const crop of BE_CROPS) {
-    if (containsWholeTerm(ingredients, crop.term)) {
+    if (hasUnqualifiedOccurrence(ingredients, crop.term, crop.excludeIfQualifiedBy)) {
       if (crop.weak) {
         weakMatches.add(crop.label);
       } else {
@@ -302,7 +342,9 @@ export function checkBioengineered(params: {
     }
   }
   for (const derivative of BE_DERIVATIVES) {
-    if (containsWholeTerm(ingredients, derivative.term)) {
+    if (
+      hasUnqualifiedOccurrence(ingredients, derivative.term, derivative.excludeIfQualifiedBy)
+    ) {
       const label = `${derivative.label} (${derivative.source})`;
       if (derivative.weak) {
         weakMatches.add(label);

@@ -244,3 +244,40 @@ test("Spanish ingredient terms match: 'maíz' (corn) and 'azúcar' (sugar)", () 
   assert.equal(result.verdict, "likely_be");
   assert.ok(result.matchedIngredients.includes("corn"));
 });
+
+test("an ingredient explicitly qualified as 'Organic' isn't counted as a BE indicator", () => {
+  const result = checkBioengineered({
+    ingredientsText: "organic soybean oil, water, salt",
+  });
+  assert.equal(result.verdict, "unknown");
+  assert.equal(result.matchedIngredients.length, 0);
+});
+
+test("'organic' exemption applies per-occurrence: a non-organic instance of the same crop still counts", () => {
+  const result = checkBioengineered({
+    ingredientsText: "organic corn flour, water, soybean oil, salt",
+  });
+  assert.equal(result.verdict, "likely_be");
+  assert.ok(result.matchedIngredients.includes("soybean"));
+});
+
+test("'cane sugar' is unambiguously not sugar-beet derived and isn't flagged", () => {
+  const result = checkBioengineered({
+    ingredientsText: "water, cane sugar, salt",
+  });
+  assert.equal(result.verdict, "unknown");
+  assert.equal(result.matchedIngredients.length, 0);
+});
+
+test("real case: Annie's Organic Bunnies Crackers (all flagged ingredients are organic-qualified) is not likely_be", () => {
+  // Real case from this session, via the USDA FoodData Central fallback:
+  // every BE-crop-adjacent ingredient here is explicitly "Organic X" or
+  // "Organic Cane Sugar" - genuinely organic-certified ingredients can't
+  // legally be bioengineered, regardless of blanket product-level labeling
+  // (which FDC doesn't even provide, unlike Open Food Facts).
+  const result = checkBioengineered({
+    ingredientsText:
+      "Organic Wheat Flour, Organic Expeller-Pressed Sunflower Oil, Organic Cheddar Cheese Paste (organic cheddar cheese [organic milk, cultures, salt, enzymes], organic nonfat dry milk, sea salt), Organic Nonfat Milk, Sea Salt, Salt, Organic Sour Cream (organic nonfat dry milk, organic cultured cream), Organic Paprika, Dried Yeast, Organic Cheddar Cheese (pasteurized milk, cheese cultures, salt, enzyme), Organic Whey, Organic Onion Powder, Monocalcium Phosphate, Baking Soda, Organic Yeast, Organic Coconut Oil, Organic Cane Sugar, Organic Maltodextrin, Organic Soybean Oil, Lactic Acid, Natural Flavors.",
+  });
+  assert.notEqual(result.verdict, "likely_be");
+});
