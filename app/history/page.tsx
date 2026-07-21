@@ -18,11 +18,13 @@ interface ScanRow {
   created_at: string;
 }
 
-const VERDICT_BADGE: Record<BEVerdict, { bg: string; label: string }> = {
-  confirmed_be: { bg: "bg-stamp", label: "BIOENGINEERED" },
-  likely_be: { bg: "bg-stamp/80", label: "LIKELY BIOENGINEERED" },
-  verified_non_gmo: { bg: "bg-verified", label: "NON-GMO VERIFIED" },
-  unknown: { bg: "bg-manifest", label: "UNKNOWN" },
+// `answer` is the direct yes/no, matching the same treatment used on the
+// scan page — the more precise wording stays as supporting detail below it.
+const VERDICT_BADGE: Record<BEVerdict, { bg: string; label: string; answer: string }> = {
+  confirmed_be: { bg: "bg-stamp", label: "Official disclosure", answer: "YES" },
+  likely_be: { bg: "bg-stamp/80", label: "Inferred from ingredients", answer: "YES" },
+  verified_non_gmo: { bg: "bg-verified", label: "Certified non-GMO", answer: "NO" },
+  unknown: { bg: "bg-manifest", label: "Not enough information", answer: "?" },
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -35,6 +37,8 @@ export default function HistoryPage() {
   const { user, loading: authLoading } = useAuth();
   const [scans, setScans] = useState<ScanRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +55,30 @@ export default function HistoryPage() {
         }
       });
   }, [user]);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setConfirmingId(null);
+    setError(null);
+
+    // .select() makes Postgrest return the deleted row(s) so we can tell a
+    // real delete apart from a no-op silently blocked by RLS (which returns
+    // no error and an empty array, not a failure) — without this, a missing
+    // delete policy would look like success in the UI while nothing was
+    // actually deleted server-side.
+    const { data, error: deleteError } = await supabase
+      .from("scans")
+      .delete()
+      .eq("id", id)
+      .select();
+
+    if (deleteError || !data || data.length === 0) {
+      setError("Couldn't delete that scan. Try again.");
+    } else {
+      setScans((prev) => prev && prev.filter((s) => s.id !== id));
+    }
+    setDeletingId(null);
+  }
 
   return (
     <main className="mx-auto max-w-md px-5 py-8">
@@ -117,11 +145,16 @@ export default function HistoryPage() {
                     )}
                   </div>
                   {badge && (
-                    <span
-                      className={`${badge.bg} shrink-0 rounded-sm px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-paper`}
-                    >
-                      {badge.label}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end">
+                      <span
+                        className={`${badge.bg} rounded-sm px-2 py-1 font-display text-sm font-bold text-paper`}
+                      >
+                        {badge.answer}
+                      </span>
+                      <span className="mt-1 font-mono text-[9px] uppercase tracking-wide text-manifest">
+                        {badge.label}
+                      </span>
+                    </div>
                   )}
                 </div>
 
@@ -140,6 +173,32 @@ export default function HistoryPage() {
                     })}
                   </span>
                 </div>
+
+                {confirmingId === scan.id ? (
+                  <div className="mt-2 flex items-center gap-3 font-mono text-[11px] uppercase tracking-wide">
+                    <span className="text-ink/70">Delete this scan?</span>
+                    <button
+                      onClick={() => handleDelete(scan.id)}
+                      disabled={deletingId === scan.id}
+                      className="text-stamp hover:underline disabled:opacity-50"
+                    >
+                      {deletingId === scan.id ? "Deleting…" : "Confirm"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingId(null)}
+                      className="text-manifest hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingId(scan.id)}
+                    className="mt-2 font-mono text-[11px] uppercase tracking-wide text-stamp hover:underline"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             );
           })}
