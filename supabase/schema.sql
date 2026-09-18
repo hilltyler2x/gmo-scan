@@ -59,6 +59,8 @@ create policy "Users can view own scans" on public.scans
   for select using (auth.uid() = user_id);
 create policy "Users can insert own scans" on public.scans
   for insert with check (auth.uid() = user_id);
+create policy "Users can delete own scans" on public.scans
+  for delete using (auth.uid() = user_id);
 
 create policy "Users can view own goals" on public.goals
   for select using (auth.uid() = user_id);

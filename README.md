@@ -25,6 +25,9 @@ BE-derived ingredients, or is verified non-GMO. Built as an MVP: Next.js 14
 1. **Supabase**
    - Create a project at supabase.com
    - Go to the SQL Editor, paste in `supabase/schema.sql`, run it
+   - If you created your project before the DELETE policy was added to
+     `schema.sql`, also run `supabase/delete_policy.sql` — without it the
+     Delete button on the history page silently does nothing under RLS
    - Go to Project Settings → API, copy the Project URL and `anon` public key
 
 2. **Local env**
