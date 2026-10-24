@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<rect width="1024" height="1024" fill="#20301F"/>
+<rect x="260" y="320" width="36" height="384" fill="#EFEBE1"/><rect x="308" y="320" width="24" height="384" fill="#EFEBE1"/><rect x="344" y="320" width="12" height="384" fill="#EFEBE1"/><rect x="392" y="320" width="24" height="384" fill="#EFEBE1"/><rect x="428" y="320" width="12" height="384" fill="#EFEBE1"/><rect x="464" y="320" width="36" height="384" fill="#EFEBE1"/><rect x="512" y="320" width="12" height="384" fill="#EFEBE1"/><rect x="536" y="320" width="24" height="384" fill="#EFEBE1"/><rect x="584" y="320" width="12" height="384" fill="#EFEBE1"/><rect x="632" y="320" width="12" height="384" fill="#EFEBE1"/><rect x="668" y="320" width="12" height="384" fill="#EFEBE1"/><rect x="692" y="320" width="36" height="384" fill="#EFEBE1"/><rect x="740" y="320" width="24" height="384" fill="#EFEBE1"/>
+<rect x="212" y="494" width="600" height="36" rx="8" fill="#C4523D"/>
+<path d="M212 220 h110 M212 220 v110 M812 220 h-110 M812 220 v110 M212 804 h110 M212 804 v-110 M812 804 h-110 M812 804 v-110" stroke="#EFEBE1" stroke-opacity="0.55" stroke-width="24" stroke-linecap="round" fill="none"/>
+</svg>

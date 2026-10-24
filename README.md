@@ -82,6 +82,12 @@ later.
 The camera scanner only runs over HTTPS (or `localhost`) — that is a browser
 rule, not an app setting. Vercel is HTTPS by default, so it works once deployed.
 
+## iPhone and Android apps
+
+The same code also builds as an iPhone and Android app, on GitHub with no Mac
+needed. See [docs/phone-apps.md](docs/phone-apps.md) for how it works and the
+one-time Apple / GitHub setup.
+
 ## Known MVP limitations (by design, not oversight)
 
 - **Google sign-in is not configured.** Email + password works out of the box;
