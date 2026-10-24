@@ -1,0 +1,195 @@
+# Builds the iPhone and Android apps (see docs/phone-apps.md).
+#
+# Every push to main:
+#   - Android: a test APK at a link that never changes,
+#     https://github.com/hilltyler2x/gmo-scan/releases/download/test-build/GMO-Scan-test.apk
+#   - iPhone: an unsigned .ipa on the same release (for Sideloadly), and an
+#     upload to TestFlight once the four App Store Connect secrets are set.
+# Pull requests build both apps as a check but publish nothing.
+name: Phone app builds
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Runs on main queue up instead of overlapping (two runs replacing the same
+# test-build release files at once breaks the release). On a pull request a
+# newer push cancels the older run.
+concurrency:
+  group: phone-builds-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  android:
+    name: Android test APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Check Supabase secrets
+        id: supabase
+        run: |
+          if [ -n "$NEXT_PUBLIC_SUPABASE_URL" ] && [ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY repo secrets are missing. Building with placeholders to check the build, but not publishing: sign-in would not work in this APK."
+            echo "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co" >> "$GITHUB_ENV"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder" >> "$GITHUB_ENV"
+          fi
+
+      - run: npm ci
+      - run: npm run build:app
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk GMO-Scan-test.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GMO-Scan-test-apk
+          path: GMO-Scan-test.apk
+
+      - name: Publish to the test-build release
+        if: env.PUBLISH == 'true' && steps.supabase.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view test-build >/dev/null 2>&1 || \
+            gh release create test-build --prerelease --target "$GITHUB_SHA" \
+              --title "Test build" --notes "Latest test build from main."
+          gh release upload test-build GMO-Scan-test.apk --clobber
+          gh release edit test-build --notes "Latest test build from main, commit ${GITHUB_SHA::7} (run #${GITHUB_RUN_NUMBER})."
+
+  ios:
+    name: iPhone build and TestFlight
+    # Xcode 26 (iOS 26 SDK). App Store Connect rejects uploads built with older Xcode.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check secrets
+        id: secrets
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -n "$NEXT_PUBLIC_SUPABASE_URL" ] && [ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            echo "supabase=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY repo secrets are missing. Building with placeholders to check the build, but not publishing."
+            echo "NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co" >> "$GITHUB_ENV"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            echo "appstore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping TestFlight: add the APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8 repo secrets to turn it on (docs/phone-apps.md)."
+          fi
+
+      - run: xcodebuild -version
+      - run: npm ci
+      - run: npm run build:app
+
+      # Unsigned build: proves the app compiles, and gives an .ipa that
+      # Sideloadly can sign with a free Apple ID (expires after 7 days).
+      - name: Build unsigned .ipa
+        run: |
+          xcodebuild build \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/App.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/GMO-Scan-unsigned.ipa" Payload)
+
+      - name: Publish unsigned .ipa to the test-build release
+        if: env.PUBLISH == 'true' && steps.secrets.outputs.supabase == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view test-build >/dev/null 2>&1 || \
+            gh release create test-build --prerelease --target "$GITHUB_SHA" \
+              --title "Test build" --notes "Latest test build from main."
+          gh release upload test-build GMO-Scan-unsigned.ipa --clobber
+
+      - name: Archive and upload to TestFlight
+        if: env.PUBLISH == 'true' && steps.secrets.outputs.supabase == 'true' && steps.secrets.outputs.appstore == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          # Notepad pastes can carry Windows line endings; strip them.
+          printf '%s\n' "$ASC_KEY_P8" | tr -d '\r' > "$KEY_PATH"
+          AUTH=(-allowProvisioningUpdates
+                -authenticationKeyPath "$KEY_PATH"
+                -authenticationKeyID "$ASC_KEY_ID"
+                -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+
+          # Automatic, cloud-managed signing: Xcode creates the certificate and
+          # profile itself through the API key. Build number = run number, so
+          # every upload is higher than the last (Apple refuses duplicates).
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            "${AUTH[@]}" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+
+          # With destination=upload, the export step sends the build to App Store Connect.
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            "${AUTH[@]}"
+
+      - name: Remove API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8

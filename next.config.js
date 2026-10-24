@@ -12,6 +12,12 @@ const nextConfig = {
     // Re-enable it, on a version >= 15.5.24, if you start using next/image.
     unoptimized: true,
   },
+  // `npm run build:app` builds the iPhone/Android version as plain static
+  // files (see scripts/build-app.mjs). The website build is unchanged.
+  ...(process.env.BUILD_TARGET === "app" && {
+    output: "export",
+    trailingSlash: true,
+  }),
 };
 
 module.exports = nextConfig;

@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AuthPanel } from "@/components/AuthPanel";
 import { checkBioengineered } from "@/lib/beCheck";
+import { API_BASE } from "@/lib/apiBase";
 
 type BEVerdict = "confirmed_be" | "likely_be" | "verified_non_gmo" | "unknown";
 type ScanSource = "barcode_scan" | "manual_entry";
@@ -90,7 +91,7 @@ export default function ScanPage() {
     setManualIngredients("");
     setLastBarcode(barcode);
     try {
-      const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
+      const res = await fetch(`${API_BASE}/api/lookup?barcode=${encodeURIComponent(barcode)}`);
       if (!res.ok) throw new Error("Lookup failed");
       const data: LookupResponse = await res.json();
       setResult(data);
