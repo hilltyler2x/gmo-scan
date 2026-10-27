@@ -7,13 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx lib/__tests__/beCheck.test.ts",
+    "test": "tsx lib/__tests__/beCheck.test.ts && tsx lib/__tests__/reviewPrompt.test.ts",
     "build:app": "node scripts/build-app.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
+    "@capawesome/capacitor-app-review": "^8.1.0",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.45.0",
     "@zxing/browser": "^0.1.5",
