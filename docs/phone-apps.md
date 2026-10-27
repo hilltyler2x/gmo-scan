@@ -143,3 +143,24 @@ npx @capacitor/assets generate --ios --android \
   on the phone only (not uploaded).
 - The app is iPhone-only (`TARGETED_DEVICE_FAMILY = 1`), so iPad screenshots
   aren't required. iPhone 6.9" screenshots are.
+
+## Asking for app store reviews
+
+The app asks for a rating with the native App Store / Google Play review
+dialog (`lib/reviewPrompt.ts`). It never asks on launch. It asks after a scan
+that gave a real answer, once the user has had 3 of those and has opened the
+app on a second day (or has had 6 in one day). After that it asks again every
+14 days, up to 8 times. iOS itself shows the dialog at most 3 times a year,
+and Google Play rations it too, so some asks show nothing.
+
+There is no "Do you like the app?" question first: both stores forbid
+filtering who gets the review dialog.
+
+The scan page also has an "Enjoying GMO Scan? Rate it" link that opens the
+store listing. On iPhone it stays hidden until `NEXT_PUBLIC_APPLE_APP_ID` in
+`.env.app` is set to the app's number from its `apps.apple.com/app/id…`
+address (after the App Store listing exists).
+
+Testing: the dialog only appears for an app installed from the store (Google
+Play internal testing track, or TestFlight on iPhone, where it never
+submits a real review). The sideloaded test APK and .ipa skip it silently.

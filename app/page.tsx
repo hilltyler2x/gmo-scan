@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthProvider";
 import { AuthPanel } from "@/components/AuthPanel";
 import { checkBioengineered } from "@/lib/beCheck";
 import { API_BASE } from "@/lib/apiBase";
+import { canOpenStorePage, openStorePage, recordAppOpen, recordGoodScan } from "@/lib/reviewPrompt";
 
 type BEVerdict = "confirmed_be" | "likely_be" | "verified_non_gmo" | "unknown";
 type ScanSource = "barcode_scan" | "manual_entry";
@@ -50,6 +51,12 @@ function getDisplayStyle(beResult: BEResult) {
   return VERDICT_STYLE[beResult.verdict];
 }
 
+// A good moment to ask for a review: the user got an actual answer, not a
+// "we couldn't tell".
+function gaveAnswer(beResult: BEResult) {
+  return beResult.verdict !== "unknown" || beResult.hasData;
+}
+
 export default function ScanPage() {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -63,6 +70,12 @@ export default function ScanPage() {
   const [manualIngredients, setManualIngredients] = useState("");
   const [checkingIngredients, setCheckingIngredients] = useState(false);
   const [readingPhoto, setReadingPhoto] = useState(false);
+  const [showRateLink, setShowRateLink] = useState(false);
+
+  useEffect(() => {
+    recordAppOpen();
+    setShowRateLink(canOpenStorePage());
+  }, []);
 
   async function saveScan(
     barcode: string | null,
@@ -95,6 +108,7 @@ export default function ScanPage() {
       if (!res.ok) throw new Error("Lookup failed");
       const data: LookupResponse = await res.json();
       setResult(data);
+      if (gaveAnswer(data.beResult)) recordGoodScan();
       await saveScan(barcode, data.product, data.beResult, source);
     } catch (e) {
       setError("Couldn't complete that lookup. Check your connection and try again.");
@@ -111,6 +125,7 @@ export default function ScanPage() {
       const updated: LookupResponse = { ...result, beResult };
       setResult(updated);
       setSaved(false);
+      if (gaveAnswer(beResult)) recordGoodScan();
       await saveScan(lastBarcode, updated.product, beResult, "manual_entry");
     } finally {
       setCheckingIngredients(false);
@@ -354,6 +369,15 @@ export default function ScanPage() {
             Scan another
           </button>
         </div>
+      )}
+
+      {showRateLink && (
+        <button
+          onClick={openStorePage}
+          className="mt-10 w-full font-mono text-xs uppercase text-manifest hover:text-ink hover:underline"
+        >
+          Enjoying GMO Scan? Rate it
+        </button>
       )}
     </main>
   );
