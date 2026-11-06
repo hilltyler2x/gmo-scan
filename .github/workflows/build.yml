@@ -3,6 +3,8 @@
 # Every push to main:
 #   - Android: a test APK at a link that never changes,
 #     https://github.com/hilltyler2x/gmo-scan/releases/download/test-build/GMO-Scan-test.apk
+#     and, once the Play upload key secrets are set, a signed .aab for Google
+#     Play next to it (GMO-Scan-release.aab).
 #   - iPhone: an unsigned .ipa on the same release (for Sideloadly), and an
 #     upload to TestFlight once the four App Store Connect secrets are set.
 # Pull requests build both apps as a check but publish nothing.
@@ -31,8 +33,11 @@ env:
 
 jobs:
   android:
-    name: Android test APK
+    name: Android test APK and Play release
     runs-on: ubuntu-latest
+    env:
+      # Android versionCode; must rise with every Play upload.
+      VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v5
 
@@ -81,6 +86,50 @@ jobs:
               --title "Test build" --notes "Latest test build from main."
           gh release upload test-build GMO-Scan-test.apk --clobber
           gh release edit test-build --notes "Latest test build from main, commit ${GITHUB_SHA::7} (run #${GITHUB_RUN_NUMBER})."
+
+      - name: Check Play upload key secrets
+        id: playkey
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::The Google Play .aab is built with a throwaway key and not published until you add the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD repo secrets to turn it on (docs/google-play.md)."
+          fi
+
+      # Signed with the Play upload key; upload this .aab in Play Console.
+      # Without the key (pull requests, or before the secrets exist) it signs
+      # with a throwaway key instead, to prove the release build still works,
+      # and publishes nothing.
+      - name: Build signed release AAB
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE: ${{ env.PUBLISH == 'true' && steps.supabase.outputs.ready == 'true' && steps.playkey.outputs.ready == 'true' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks"
+          if [ "$RELEASE" = "true" ]; then
+            # Pasted base64 may carry line breaks or Windows line endings.
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          else
+            export ANDROID_KEYSTORE_PASSWORD=throwaway ANDROID_KEY_PASSWORD=throwaway ANDROID_KEY_ALIAS=throwaway
+            keytool -genkeypair -keystore "$ANDROID_KEYSTORE_PATH" -alias throwaway \
+              -storepass throwaway -keypass throwaway -keyalg RSA -keysize 2048 \
+              -validity 1 -dname "CN=throwaway" -noprompt
+          fi
+          (cd android && ./gradlew bundleRelease --no-daemon)
+          rm -f "$ANDROID_KEYSTORE_PATH"
+          if [ "$RELEASE" = "true" ]; then
+            cp android/app/build/outputs/bundle/release/app-release.aab GMO-Scan-release.aab
+            gh release upload test-build GMO-Scan-release.aab --clobber
+          fi
 
   ios:
     name: iPhone build and TestFlight

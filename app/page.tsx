@@ -379,6 +379,15 @@ export default function ScanPage() {
           Enjoying GMO Scan? Rate it
         </button>
       )}
+
+      <footer className="mt-10 flex justify-center gap-4 font-mono text-[11px] uppercase text-manifest">
+        <Link href="/privacy" className="hover:text-ink hover:underline">
+          Privacy
+        </Link>
+        <Link href="/delete-account" className="hover:text-ink hover:underline">
+          Delete account
+        </Link>
+      </footer>
     </main>
   );
 }
