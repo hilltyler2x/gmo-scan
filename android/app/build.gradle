@@ -7,7 +7,9 @@ android {
         applicationId "com.hilltyler2x.gmoscan"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // CI passes the GitHub run number so every Play upload is higher
+        // than the last (Play refuses a versionCode it has seen before).
+        versionCode Integer.parseInt(System.getenv("VERSION_CODE") ?: "1")
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -16,8 +18,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Play upload key, supplied by CI from repo secrets (docs/google-play.md).
+    // Without it the release build is left unsigned and CI doesn't publish it.
+    def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
