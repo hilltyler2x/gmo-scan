@@ -190,12 +190,20 @@ export default function ScanPage() {
         <h1 className="font-display text-3xl font-bold uppercase tracking-tight">
           GMO Scan
         </h1>
-        <Link
-          href="/history"
-          className="font-mono text-xs uppercase text-manifest hover:text-ink hover:underline"
-        >
-          History
-        </Link>
+        <nav className="flex gap-4">
+          <Link
+            href="/questions"
+            className="font-mono text-xs uppercase text-manifest hover:text-ink hover:underline"
+          >
+            GMO Q&amp;A
+          </Link>
+          <Link
+            href="/history"
+            className="font-mono text-xs uppercase text-manifest hover:text-ink hover:underline"
+          >
+            History
+          </Link>
+        </nav>
       </header>
 
       <AuthPanel />
