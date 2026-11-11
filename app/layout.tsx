@@ -12,6 +12,15 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   alternates: { canonical: "/" },
   openGraph: { title: "GMO Scan — Know What You Eat", description: DESCRIPTION, url: "/", siteName: SITE_NAME, type: "website" },
+  // Ownership checks for Google Search Console and Bing Webmaster Tools. Paste
+  // each site's "HTML tag" code into these Vercel environment variables and
+  // redeploy; unset, no tag is printed.
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+    other: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION
+      ? { "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION }
+      : undefined,
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icons/icon-192.png",
