@@ -1,11 +1,26 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthProvider";
+import { SITE_NAME, SITE_URL } from "@/lib/seo";
+
+const DESCRIPTION =
+  "Scan any barcode to check if a product is bioengineered (GMO), track your purchases, and build healthier habits.";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "GMO Scan — Know What You Eat",
-  description:
-    "Scan any barcode to check if a product is bioengineered, track your purchases, and build healthier habits.",
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: { title: "GMO Scan — Know What You Eat", description: DESCRIPTION, url: "/", siteName: SITE_NAME, type: "website" },
+  // Ownership checks for Google Search Console and Bing Webmaster Tools. Paste
+  // each site's "HTML tag" code into these Vercel environment variables and
+  // redeploy; unset, no tag is printed.
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
+    other: process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION
+      ? { "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION }
+      : undefined,
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icons/icon-192.png",
@@ -22,6 +37,18 @@ export const viewport: Viewport = {
   themeColor: "#EFEBE1",
 };
 
+// Tells search engines and AI assistants what GMO Scan is, on every page.
+const APP_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: SITE_NAME,
+  url: `${SITE_URL}/`,
+  description:
+    "Checks whether a packaged food is bioengineered (GMO) from its barcode or ingredient list, using USDA bioengineered disclosures, USDA Organic and Non-GMO Project Verified claims, and the USDA List of Bioengineered Foods.",
+  applicationCategory: "HealthApplication",
+  operatingSystem: "Any (web browser), iOS, Android",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -30,6 +57,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-paper text-ink font-body min-h-screen">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(APP_JSON_LD) }} />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
